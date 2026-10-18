@@ -1,0 +1,67 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: flashflow-backend
+  profiles:
+    active: ${SPRING_PROFILES_ACTIVE:local}
+
+  # Default Local Datasource (H2 in-memory with PostgreSQL compatibility mode)
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:h2:mem:flashflowdb;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE}
+    driverClassName: ${SPRING_DATASOURCE_DRIVER:org.h2.Driver}
+    username: ${SPRING_DATASOURCE_USERNAME:sa}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+  
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+  jpa:
+    database-platform: ${SPRING_JPA_DIALECT:org.hibernate.dialect.H2Dialect}
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  # Redis Configuration
+  data:
+    redis:
+      host: ${SPRING_REDIS_HOST:localhost}
+      port: ${SPRING_REDIS_PORT:6379}
+      password: ${SPRING_REDIS_PASSWORD:}
+      timeout: 2000ms
+
+  # Apache Kafka Configuration
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: flashflow-engine-group
+      auto-offset-reset: earliest
+    listener:
+      missing-topics-fatal: false
+
+flashflow:
+  redis:
+    enabled: ${FLASHFLOW_REDIS_ENABLED:false}
+  kafka:
+    enabled: ${FLASHFLOW_KAFKA_ENABLED:false}
+  reconciliation:
+    interval-ms: 30000
+    timeout-minutes: 2
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+
+logging:
+  level:
+    com.flashflow: INFO
+    org.springframework.web: INFO
+    org.apache.kafka: WARN

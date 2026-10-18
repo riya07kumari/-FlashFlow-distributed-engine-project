@@ -1,0 +1,131 @@
+version: '3.8'
+
+services:
+  # ----------------------------------------------------
+  # 1. PostgreSQL Database with Stock Non-Negative Check
+  # ----------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: flashflow-postgres
+    environment:
+      POSTGRES_DB: flashflowdb
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d flashflowdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - flashflow-net
+
+  # ----------------------------------------------------
+  # 2. Redis for Distributed Locking & In-Memory Pre-Check
+  # ----------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: flashflow-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - flashflow-net
+
+  # ----------------------------------------------------
+  # 3. Apache Kafka (KRaft Mode - Ultra Fast & No Zookeeper)
+  # ----------------------------------------------------
+  kafka:
+    image: apache/kafka:3.7.0
+    container_name: flashflow-kafka
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,EXTERNAL://:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_NUM_PARTITIONS: 3
+    volumes:
+      - kafka_data:/tmp/kraft-combined-logs
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - flashflow-net
+
+  # ----------------------------------------------------
+  # 4. FlashFlow Spring Boot 3 Engine
+  # ----------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: flashflow-backend
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_PROFILES_ACTIVE: docker
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/flashflowdb
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgrespassword
+      SPRING_REDIS_HOST: redis
+      SPRING_REDIS_PORT: 6379
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      FLASHFLOW_REDIS_ENABLED: "true"
+      FLASHFLOW_KAFKA_ENABLED: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - flashflow-net
+
+  # ----------------------------------------------------
+  # 5. FlashFlow React 18 Dashboard & Concurrency Studio
+  # ----------------------------------------------------
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: flashflow-frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    networks:
+      - flashflow-net
+
+volumes:
+  postgres_data:
+  redis_data:
+  kafka_data:
+
+networks:
+  flashflow-net:
+    driver: bridge

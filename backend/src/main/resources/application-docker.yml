@@ -1,0 +1,40 @@
+server:
+  port: 8080
+
+spring:
+  datasource:
+    url: jdbc:postgresql://postgres:5432/flashflowdb
+    driverClassName: org.postgresql.Driver
+    username: postgres
+    password: postgrespassword
+
+  jpa:
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+
+  data:
+    redis:
+      host: redis
+      port: 6379
+
+  kafka:
+    bootstrap-servers: kafka:9092
+    consumer:
+      group-id: flashflow-engine-group
+      auto-offset-reset: earliest
+
+flashflow:
+  redis:
+    enabled: true
+  kafka:
+    enabled: true
+  reconciliation:
+    interval-ms: 30000
+    timeout-minutes: 2
+
+logging:
+  level:
+    com.flashflow: INFO
+    org.apache.kafka: WARN
