@@ -39,26 +39,38 @@ jobs:
           cache-dependency-path: backend/pom.xml
 
       - name: Verify Java Environment
+        shell: bash
         run: |
+          set -eu
           java -version
           echo "JAVA_HOME=$JAVA_HOME"
           test -f "$JAVA_HOME/lib/security/cacerts"
           keytool -list -cacerts -storepass changeit > /dev/null
-          echo "Java trust store check passed"
+          echo "Java default trust store check passed"
 
       - name: Run Backend Tests and Package
         working-directory: backend
+        shell: bash
         env:
           SPRING_REDIS_HOST: localhost
           SPRING_REDIS_PORT: "6379"
           FLASHFLOW_REDIS_ENABLED: "true"
           FLASHFLOW_KAFKA_ENABLED: "false"
         run: |
+          set -eu
           chmod +x ./mvnw
-          env -u JAVA_TOOL_OPTIONS \
-              -u JDK_JAVA_OPTIONS \
-              -u _JAVA_OPTIONS \
-              ./mvnw clean verify -B
+
+          # Remove potentially conflicting Java and Maven options.
+          unset JAVA_TOOL_OPTIONS || true
+          unset JDK_JAVA_OPTIONS || true
+          unset _JAVA_OPTIONS || true
+          unset MAVEN_OPTS || true
+
+          echo "Checking Maven and Java versions..."
+          ./mvnw -version
+
+          echo "Running backend verification..."
+          ./mvnw -U clean verify -B
 
   frontend-build:
     name: Frontend React 18 Build
